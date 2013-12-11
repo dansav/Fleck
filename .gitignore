@@ -2,9 +2,7 @@ bin
 obj
 build
 _ReSharper.*
-*.csproj.user
-*.resharper.user
-*.ReSharper.user
+*.user
 *.ReSharper
 *.suo
 *.userprefs

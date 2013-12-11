@@ -53,7 +53,7 @@ namespace Fleck
             {
                 if (Certificate == null)
                 {
-                    FleckLog.Error("Scheme cannot be 'wss' without a Certificate");
+                    FleckLog.Info("Scheme cannot be 'wss' without a Certificate");
                     return;
                 }
             }
@@ -82,7 +82,7 @@ namespace Fleck
 
         private void OnClientConnect(ISocket clientSocket)
         {
-            FleckLog.Debug(String.Format("Client connected from {0}:{1}", clientSocket.RemoteIpAddress, clientSocket.RemotePort.ToString()));
+            FleckLog.Debug(String.Format("Client connected from {0}:{1}", clientSocket.RemoteIpAddress, clientSocket.RemotePort));
             ListenForClients();
 
             WebSocketConnection connection = null;

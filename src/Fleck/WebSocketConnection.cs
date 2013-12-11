@@ -82,7 +82,7 @@ namespace Fleck
         throw new InvalidOperationException("Cannot send before handshake");
 
       if (!IsAvailable) {
-        FleckLog.Warn("Data sent while closing or after close. Ignoring.");
+        FleckLog.Debug("Data sent while closing or after close. Ignoring.");
         return;
       }
 
@@ -178,7 +178,7 @@ namespace Fleck
       }
 
       OnError(e);
-            
+
       if (e is HandshakeException) {
         FleckLog.Debug("Error while reading", e);
       } else if (e is WebSocketException) {
@@ -191,7 +191,7 @@ namespace Fleck
         FleckLog.Debug("Error while reading", e);
         Close(WebSocketStatusCodes.AbnormalClosure);
       } else {
-        FleckLog.Error("Application Error", e);
+        FleckLog.Warn("Application Error", e);
         Close(WebSocketStatusCodes.InternalServerError);
       }
     }
@@ -204,14 +204,20 @@ namespace Fleck
         if (callback != null)
           callback();
       },
-                        e =>
+      HandleSendError);
+    }
+
+    private void HandleSendError(Exception e)
+    {
+      if (e is IOException)
       {
-        if (e is IOException)
-          FleckLog.Debug("Failed to send. Disconnecting.", e);
-        else
-          FleckLog.Info("Failed to send. Disconnecting.", e);
-        CloseSocket();
-      });
+        FleckLog.Debug("Failed to send. Disconnecting.", e);
+      }
+      else
+      {
+        FleckLog.Info("Failed to send. Disconnecting.", e);
+      }
+      CloseSocket();
     }
 
     private void CloseSocket()
@@ -223,6 +229,5 @@ namespace Fleck
       Socket.Dispose();
       _closing = false;
     }
-
   }
 }

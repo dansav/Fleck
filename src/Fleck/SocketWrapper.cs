@@ -13,9 +13,9 @@ namespace Fleck
     public class SocketWrapper : ISocket
     {
         private readonly Socket _socket;
+        private readonly CancellationTokenSource _cancelToken;
+        private readonly TaskFactory _taskFactory;
         private Stream _stream;
-        private CancellationTokenSource _tokenSource;
-        private TaskFactory _taskFactory;
         
         public string RemoteIpAddress
         {
@@ -38,8 +38,8 @@ namespace Fleck
 
         public SocketWrapper(Socket socket)
         {
-            _tokenSource = new CancellationTokenSource();
-            _taskFactory = new TaskFactory(_tokenSource.Token);
+            _cancelToken = new CancellationTokenSource();
+            _taskFactory = new TaskFactory(_cancelToken.Token);
             _socket = socket;
             if (_socket.Connected)
                 _stream = new NetworkStream(_socket);
@@ -106,29 +106,42 @@ namespace Fleck
             }
         }
 
+        public Task<ISocket> AcceptAsync()
+        {
+            Func<IAsyncResult, ISocket> endAccept = result =>
+            {
+                _cancelToken.Token.ThrowIfCancellationRequested();
+                return new SocketWrapper(_socket.EndAccept(result));
+            };
+
+            return _taskFactory.FromAsync(_socket.BeginAccept, endAccept, null);
+        }
+
         public Task<ISocket> Accept(Action<ISocket> callback, Action<Exception> error)
         {
             Func<IAsyncResult, ISocket> end = r => {
-                _tokenSource.Token.ThrowIfCancellationRequested();
+                _cancelToken.Token.ThrowIfCancellationRequested();
                 return new SocketWrapper(_socket.EndAccept(r));
             };
+
             var task = _taskFactory.FromAsync(_socket.BeginAccept, end, null);
             task.ContinueWith(t => callback(t.Result), TaskContinuationOptions.OnlyOnRanToCompletion)
                 .ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
             task.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnFaulted);
+            task.ContinueWith(t => error(t.Exception), TaskContinuationOptions.OnlyOnCanceled);
             return task;
         }
 
         public void Dispose()
         {
-            _tokenSource.Cancel();
+            _cancelToken.Cancel();
             if (_stream != null) _stream.Dispose();
             if (_socket != null) _socket.Dispose();
         }
 
         public void Close()
         {
-            _tokenSource.Cancel();
+            _cancelToken.Cancel();
             if (_stream != null) _stream.Close();
             if (_socket != null) _socket.Close();
         }
@@ -141,7 +154,7 @@ namespace Fleck
 
         public Task Send(byte[] buffer, Action callback, Action<Exception> error)
         {
-            if (_tokenSource.IsCancellationRequested)
+            if (_cancelToken.IsCancellationRequested)
                 return null;
 
             try

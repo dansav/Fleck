@@ -24,5 +24,6 @@ namespace Fleck
 
         void Bind(EndPoint ipLocal);
         void Listen(int backlog);
+        Task<ISocket> AcceptAsync();
     }
 }

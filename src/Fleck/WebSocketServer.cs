@@ -61,9 +61,23 @@ namespace Fleck
             _config = config;
         }
 
-        private void ListenForClients()
+        private async void ListenForClients()
         {
-            ListenerSocket.Accept(OnClientConnect, e => FleckLog.Error("Listener socket is closed", e));
+            ISocket clientSocket = null;
+            try
+            {
+                clientSocket = await ListenerSocket.AcceptAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                FleckLog.Info("Listener socket is closed", ex);
+            }
+
+            OnClientConnect(clientSocket);
         }
 
         private void OnClientConnect(ISocket clientSocket)

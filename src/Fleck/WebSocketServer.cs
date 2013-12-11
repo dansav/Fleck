@@ -8,6 +8,7 @@ namespace Fleck
 {
     public class WebSocketServer : IWebSocketServer
     {
+        private readonly IPAddress _address;
         private readonly string _scheme;
         private Action<IWebSocketConnection> _config;
 
@@ -17,7 +18,13 @@ namespace Fleck
         }
 
         public WebSocketServer(int port, string location)
+            : this(IPAddress.Loopback, port, location)
         {
+        }
+
+        public WebSocketServer(IPAddress address, int port, string location)
+        {
+            _address = address;
             var uri = new Uri(location);
             Port = uri.Port > 0 ? uri.Port : port;
             Location = location;
@@ -45,7 +52,7 @@ namespace Fleck
 
         public void Start(Action<IWebSocketConnection> config)
         {
-            var ipLocal = new IPEndPoint(IPAddress.Any, Port);
+            var ipLocal = new IPEndPoint(_address, Port);
             ListenerSocket.Bind(ipLocal);
             ListenerSocket.Listen(100);
             FleckLog.Info("Server started at " + Location);

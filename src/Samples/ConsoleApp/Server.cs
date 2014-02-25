@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 
 namespace Fleck.Samples.ConsoleApp
 {
@@ -11,7 +10,7 @@ namespace Fleck.Samples.ConsoleApp
         {
             FleckLog.Level = LogLevel.Debug;
             var allSockets = new List<IWebSocketConnection>();
-            var server = new WebSocketServer("ws://localhost:8181");
+            var server = WebSocketServer.Create(new Uri("ws://localhost:8181"));
             server.Start(socket =>
                 {
                     socket.OnOpen = () =>
@@ -41,7 +40,6 @@ namespace Fleck.Samples.ConsoleApp
                 }
                 input = Console.ReadLine();
             }
-
         }
     }
 }

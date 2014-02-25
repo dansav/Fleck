@@ -16,7 +16,18 @@ namespace Fleck
         private readonly CancellationTokenSource _cancelToken;
         private readonly TaskFactory _taskFactory;
         private Stream _stream;
-        
+
+        public SocketWrapper(Socket socket)
+        {
+            _cancelToken = new CancellationTokenSource();
+            _taskFactory = new TaskFactory(_cancelToken.Token);
+            _socket = socket;
+            if (_socket.Connected)
+                _stream = new NetworkStream(_socket);
+        }
+
+        public bool IsBound { get { return _socket.IsBound; } }
+
         public string RemoteIpAddress
         {
             get
@@ -35,14 +46,20 @@ namespace Fleck
             }
         }
 
-
-        public SocketWrapper(Socket socket)
+        public bool Connected
         {
-            _cancelToken = new CancellationTokenSource();
-            _taskFactory = new TaskFactory(_cancelToken.Token);
-            _socket = socket;
-            if (_socket.Connected)
-                _stream = new NetworkStream(_socket);
+            get { return _socket.Connected; }
+        }
+
+        public Stream Stream
+        {
+            get { return _stream; }
+        }
+
+        public bool NoDelay
+        {
+            get { return _socket.NoDelay; }
+            set { _socket.NoDelay = value; }
         }
 
         public Task Authenticate(X509Certificate2 certificate, Action callback, Action<Exception> error)
@@ -68,22 +85,6 @@ namespace Fleck
         public void Bind(EndPoint endPoint)
         {
             _socket.Bind(endPoint);
-        }
-
-        public bool Connected
-        {
-            get { return _socket.Connected; }
-        }
-        
-        public Stream Stream
-        {
-            get { return _stream; }
-        }
-
-        public bool NoDelay
-        {
-            get { return _socket.NoDelay; }
-            set { _socket.NoDelay = value; }
         }
 
         public Task<int> Receive(byte[] buffer, Action<int> callback, Action<Exception> error, int offset)

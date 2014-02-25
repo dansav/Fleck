@@ -1,48 +1,61 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
-using System.Collections.Generic;
 
 namespace Fleck
 {
     public class WebSocketServer : IWebSocketServer
     {
-        private readonly IPAddress _address;
-        private readonly string _scheme;
+        private const int DefaultListenPort = 8181;
+
+        private readonly bool _secure;
+        private readonly IPAddress _listenHostAddress;
+
         private Action<IWebSocketConnection> _config;
-
-        public WebSocketServer(string location)
-            : this(8181, location)
+        
+        public WebSocketServer(bool secure, IPAddress host, int port)
         {
-        }
+            _secure = secure;
+            Port = port;
+            HostName = host.ToString();
+            _listenHostAddress = host;
 
-        public WebSocketServer(int port, string location)
-            : this(IPAddress.Loopback, port, location)
-        {
-        }
-
-        public WebSocketServer(IPAddress address, int port, string location)
-        {
-            _address = address;
-            var uri = new Uri(location);
-            Port = uri.Port > 0 ? uri.Port : port;
-            Location = location;
-            _scheme = uri.Scheme;
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
             ListenerSocket = new SocketWrapper(socket);
             SupportedSubProtocols = new string[0];
         }
 
+        public static WebSocketServer Create(Uri location)
+        {
+            bool secure;
+            switch (location.Scheme)
+            {
+                case "wss":
+                    secure = true;
+                    break;
+                case "ws":
+                    secure = false;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException("location", "Uri contains invalid scheme, supported schemes are 'ws' and 'wss'");
+            }
+
+            var host = Dns.GetHostAddresses(location.Host).FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork) ?? IPAddress.Loopback;
+            return new WebSocketServer(secure, host, location.Port > 0 ? location.Port : DefaultListenPort);
+        }
+
         public ISocket ListenerSocket { get; set; }
-        public string Location { get; private set; }
+        public string HostName { get; private set; }
         public int Port { get; private set; }
         public X509Certificate2 Certificate { get; set; }
         public IEnumerable<string> SupportedSubProtocols { get; set; }
 
         public bool IsSecure
         {
-            get { return _scheme == "wss" && Certificate != null; }
+            get { return _secure && Certificate != null; }
         }
 
         public void Dispose()
@@ -52,11 +65,36 @@ namespace Fleck
 
         public void Start(Action<IWebSocketConnection> config)
         {
-            var ipLocal = new IPEndPoint(_address, Port);
-            ListenerSocket.Bind(ipLocal);
+            if (TryBindListenSocket())
+            {
+                StartListen(config);
+            }
+        }
+
+        public bool TryBindListenSocket(int port = 0)
+        {
+            if (port > 0)
+                Port = port;
+
+            var ipLocal = new IPEndPoint(_listenHostAddress, Port);
+
+            try
+            {
+                ListenerSocket.Bind(ipLocal);
+                return true;
+            }
+            catch (SocketException)
+            {
+                ListenerSocket.Close();
+                return false;
+            }
+        }
+
+        public void StartListen(Action<IWebSocketConnection> config)
+        {
             ListenerSocket.Listen(100);
-            FleckLog.Info("Server started at " + Location);
-            if (_scheme == "wss")
+            FleckLog.Info("Server started at " + HostName);
+            if (_secure)
             {
                 if (Certificate == null)
                 {
@@ -67,6 +105,7 @@ namespace Fleck
             ListenForClients();
             _config = config;
         }
+
 
         private async void ListenForClients()
         {
@@ -89,7 +128,8 @@ namespace Fleck
 
         private void OnClientConnect(ISocket clientSocket)
         {
-            FleckLog.Debug(String.Format("Client connected from {0}:{1}", clientSocket.RemoteIpAddress, clientSocket.RemotePort));
+            FleckLog.Debug(String.Format("Client connected from {0}:{1}", clientSocket.RemoteIpAddress,
+                clientSocket.RemotePort));
             ListenForClients();
 
             WebSocketConnection connection = null;
@@ -97,22 +137,22 @@ namespace Fleck
             connection = new WebSocketConnection(
                 clientSocket,
                 _config,
-                bytes => RequestParser.Parse(bytes, _scheme),
-                r => HandlerFactory.BuildHandler(r,
-                                                 s => connection.OnMessage(s),
-                                                 connection.Close,
-                                                 b => connection.OnBinary(b),
-                                                 b => connection.OnPing(b),
-                                                 b => connection.OnPong(b)),
-                s => SubProtocolNegotiator.Negotiate(SupportedSubProtocols, s));
+                bytes => RequestParser.Parse(bytes, _secure ? "wss" : "ws"),
+                request => HandlerFactory.BuildHandler(request,
+                    message => connection.OnMessage(message),
+                    connection.Close,
+                    data => connection.OnBinary(data),
+                    data => connection.OnPing(data),
+                    data => connection.OnPong(data)),
+                clientProtocols => SubProtocolNegotiator.Negotiate(SupportedSubProtocols, clientProtocols));
 
             if (IsSecure)
             {
                 FleckLog.Debug("Authenticating Secure Connection");
-                clientSocket
-                    .Authenticate(Certificate,
-                                  connection.StartReceiving,
-                                  e => FleckLog.Warn("Failed to Authenticate", e));
+                clientSocket.Authenticate(
+                    Certificate,
+                    connection.StartReceiving,
+                    e => FleckLog.Warn("Failed to Authenticate", e));
             }
             else
             {

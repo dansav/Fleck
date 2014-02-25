@@ -8,6 +8,7 @@ namespace Fleck
 {
     public interface ISocket
     {
+        bool IsBound { get; }
         bool Connected { get; }
         string RemoteIpAddress { get; }
         int RemotePort { get; }

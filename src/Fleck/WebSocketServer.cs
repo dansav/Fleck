@@ -109,7 +109,7 @@ namespace Fleck
 
         private async void ListenForClients()
         {
-            ISocket clientSocket = null;
+            ISocket clientSocket;
             try
             {
                 clientSocket = await ListenerSocket.AcceptAsync();
@@ -121,6 +121,7 @@ namespace Fleck
             catch (Exception ex)
             {
                 FleckLog.Info("Listener socket is closed", ex);
+                return;
             }
 
             OnClientConnect(clientSocket);
@@ -133,7 +134,6 @@ namespace Fleck
             ListenForClients();
 
             WebSocketConnection connection = null;
-
             connection = new WebSocketConnection(
                 clientSocket,
                 _config,
